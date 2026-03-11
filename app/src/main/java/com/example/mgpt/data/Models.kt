@@ -31,12 +31,9 @@ data class User(
 
 data class PatrolUnit(
     val id: String,
-    val userId: String,
-    val type: UnitType,
-    val status: String,
-    val lastLat: Double,
-    val lastLng: Double,
-    val lastUpdate: Long
+    val lat: Double,
+    val lng: Double,
+    val role: UserRole
 )
 
 data class Incident(

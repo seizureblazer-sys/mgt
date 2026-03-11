@@ -7,7 +7,6 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -19,6 +18,7 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -37,6 +37,9 @@ import com.example.mgpt.ui.MainViewModel
 import com.example.mgpt.ui.screens.LoginScreen
 import com.example.mgpt.ui.screens.ReportIncidentScreen
 import com.example.mgpt.ui.theme.MgptTheme
+import com.google.android.gms.maps.model.CameraPosition
+import com.google.android.gms.maps.model.LatLng
+import com.google.maps.android.compose.*
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -46,42 +49,41 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         sessionManager = SessionManager(this)
         
-        // Wake Lock: Prevents screen from dimming during active patrols
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
         enableEdgeToEdge()
         
-        // Connect to Tactical Backend
-        SocketManager.connect("http://10.0.2.2:3000") { // Default emulator address
-            runOnUiThread {
-                // Handle connection success if needed
-            }
-        }
+        // Connect to Render Backend
+        SocketManager.connect("https://mgt-server.onrender.com")
 
         setContent {
             MgptTheme {
                 val userSession by sessionManager.userSession.collectAsStateWithLifecycle(initialValue = null)
+                val isConnected by SocketManager.isConnected.collectAsStateWithLifecycle()
 
-                if (userSession == null) {
-                    LoginScreen(onLoginSuccess = { id, username, role ->
-                        lifecycleScope.launch {
-                            val user = User(id, username, role)
-                            sessionManager.saveSession(user)
-                            if (role == UserRole.PATROL) {
-                                startTrackingService()
-                            }
-                        }
-                    })
-                } else {
-                    MgptApp(
-                        user = userSession!!,
-                        onLogout = {
+                Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                    if (userSession == null) {
+                        LoginScreen(onLoginSuccess = { id, username, role ->
                             lifecycleScope.launch {
-                                sessionManager.clearSession()
-                                stopTrackingService()
+                                val user = User(id, username, role)
+                                sessionManager.saveSession(user)
+                                if (role == UserRole.PATROL) {
+                                    startTrackingService()
+                                }
                             }
-                        }
-                    )
+                        })
+                    } else {
+                        MgptApp(
+                            user = userSession!!,
+                            isConnected = isConnected,
+                            onLogout = {
+                                lifecycleScope.launch {
+                                    sessionManager.clearSession()
+                                    stopTrackingService()
+                                }
+                            }
+                        )
+                    }
                 }
             }
         }
@@ -106,6 +108,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun MgptApp(
     user: User, 
+    isConnected: Boolean,
     onLogout: () -> Unit,
     viewModel: MainViewModel = viewModel()
 ) {
@@ -129,18 +132,38 @@ fun MgptApp(
                     }
                 )
             }
-        },
-        containerColor = MaterialTheme.colorScheme.background,
-        contentColor = MaterialTheme.colorScheme.onBackground
+        }
     ) {
         Scaffold(
             modifier = Modifier.fillMaxSize(),
-            containerColor = MaterialTheme.colorScheme.background
+            topBar = {
+                if (!isConnected) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.errorContainer,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(8.dp).statusBarsPadding(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                "Waking up Tactical Server...",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                        }
+                    }
+                }
+            }
         ) { innerPadding ->
-            Surface(
-                modifier = Modifier.padding(innerPadding),
-                color = MaterialTheme.colorScheme.background
-            ) {
+            Box(modifier = Modifier.padding(innerPadding)) {
                 when (currentDestination) {
                     AppDestinations.TACTICAL_MAP -> TacticalMapScreen(user, viewModel)
                     AppDestinations.REPORT -> ReportIncidentScreen(user) { type, priority, desc ->
@@ -165,47 +188,62 @@ enum class AppDestinations(val label: String, val icon: ImageVector) {
 @Composable
 fun TacticalMapScreen(user: User, viewModel: MainViewModel) {
     val feed by viewModel.tacticalFeed.collectAsStateWithLifecycle()
+    val units by viewModel.units.collectAsStateWithLifecycle()
+    
+    val defaultPos = LatLng(1.3521, 103.8198)
+    val cameraPositionState = rememberCameraPositionState {
+        position = CameraPosition.fromLatLngZoom(defaultPos, 12f)
+    }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        // Map Placeholder (Simulation)
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
                 .background(Color.Black)
-                .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
         ) {
-            Text(
-                "TACTICAL GRID: SECTOR 7",
-                modifier = Modifier.padding(16.dp),
-                color = MaterialTheme.colorScheme.primary,
-                style = MaterialTheme.typography.labelSmall
-            )
+            GoogleMap(
+                modifier = Modifier.fillMaxSize(),
+                cameraPositionState = cameraPositionState,
+                properties = MapProperties(isMyLocationEnabled = true),
+                uiSettings = MapUiSettings(myLocationButtonEnabled = true)
+            ) {
+                units.values.forEach { unit ->
+                    Marker(
+                        state = MarkerState(position = LatLng(unit.lat, unit.lng)),
+                        title = "Unit: ${unit.id}",
+                        snippet = "Role: ${unit.role}"
+                    )
+                }
+            }
             
-            // Simulation of Unit Markers
-            Text(
-                "• UNIT_01 [INF]",
-                modifier = Modifier.padding(start = 100.dp, top = 200.dp),
-                color = MaterialTheme.colorScheme.primary,
-                style = MaterialTheme.typography.labelSmall
-            )
+            Surface(
+                color = Color.Black.copy(alpha = 0.6f),
+                modifier = Modifier.align(Alignment.TopStart).padding(8.dp)
+            ) {
+                Text(
+                    "TACTICAL GRID ACTIVE",
+                    modifier = Modifier.padding(4.dp),
+                    color = Color.Green,
+                    style = MaterialTheme.typography.labelSmall
+                )
+            }
         }
 
-        // Tactical Feed (Log)
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(200.dp)
+                .height(150.dp)
                 .background(MaterialTheme.colorScheme.surface)
                 .padding(8.dp)
         ) {
             Text(
-                "REAL-TIME TACTICAL FEED",
+                "LIVE TACTICAL FEED",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.primary,
                 fontWeight = FontWeight.Bold
             )
-            Divider(color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f), modifier = Modifier.padding(vertical = 4.dp))
+            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
             
             LazyColumn(modifier = Modifier.fillMaxSize()) {
                 items(feed) { entry ->
@@ -213,7 +251,6 @@ fun TacticalMapScreen(user: User, viewModel: MainViewModel) {
                         text = entry,
                         style = MaterialTheme.typography.bodySmall,
                         fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-                        color = MaterialTheme.colorScheme.onSurface,
                         fontSize = 10.sp
                     )
                 }
@@ -225,20 +262,10 @@ fun TacticalMapScreen(user: User, viewModel: MainViewModel) {
 @Composable
 fun AdminPanelScreen(user: User) {
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Text("COMMAND & CONTROL PANEL", style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.primary)
+        Text("COMMAND & CONTROL", style = MaterialTheme.typography.headlineMedium)
         Spacer(modifier = Modifier.height(16.dp))
-        Text("USER MANAGEMENT", style = MaterialTheme.typography.titleLarge)
-        
-        // Placeholder for user creation UI
-        OutlinedTextField(
-            value = "",
-            onValueChange = {},
-            label = { Text("NEW UNIT IDENTIFIER") },
-            modifier = Modifier.fillMaxWidth()
-        )
-        Spacer(modifier = Modifier.height(8.dp))
         Button(onClick = {}, modifier = Modifier.fillMaxWidth()) {
-            Text("PROVISION ACCESS")
+            Text("PROVISION NEW UNIT")
         }
     }
 }

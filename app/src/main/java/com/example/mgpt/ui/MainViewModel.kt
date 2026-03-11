@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.mgpt.data.Incident
 import com.example.mgpt.data.PatrolUnit
+import com.example.mgpt.data.UserRole
 import com.example.mgpt.network.SocketManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -19,6 +20,8 @@ class MainViewModel : ViewModel() {
 
     private val _tacticalFeed = MutableStateFlow<List<String>>(emptyList())
     val tacticalFeed: StateFlow<List<String>> = _tacticalFeed
+    
+    val isConnected = SocketManager.isConnected
 
     init {
         setupSocketListeners()
@@ -27,14 +30,18 @@ class MainViewModel : ViewModel() {
     private fun setupSocketListeners() {
         SocketManager.on("unit_moved") { args ->
             val data = args[0] as JSONObject
-            // Update unit position logic
-            addToFeed("Unit ${data.getString("unitId")} moved")
+            val unitId = data.getString("unitId")
+            val lat = data.getDouble("lat")
+            val lng = data.getDouble("lng")
+            val role = try { UserRole.valueOf(data.getString("role")) } catch (e: Exception) { UserRole.PATROL }
+
+            _units.value = _units.value + (unitId to PatrolUnit(unitId, lat, lng, role))
+            addToFeed("Unit $unitId moved to $lat, $lng")
         }
 
         SocketManager.on("new_incident") { args ->
             val data = args[0] as JSONObject
-            // Add incident logic
-            addToFeed("NEW INCIDENT: ${data.getString("type")}")
+            addToFeed("NEW INCIDENT: ${data.getString("type")} at ${data.optString("location", "Unknown")}")
         }
     }
 
@@ -50,7 +57,8 @@ class MainViewModel : ViewModel() {
 
     private fun addToFeed(message: String) {
         viewModelScope.launch {
-            _tacticalFeed.value = (listOf("[${System.currentTimeMillis()}] $message") + _tacticalFeed.value).take(50)
+            val timestamp = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
+            _tacticalFeed.value = (listOf("[$timestamp] $message") + _tacticalFeed.value).take(50)
         }
     }
 }

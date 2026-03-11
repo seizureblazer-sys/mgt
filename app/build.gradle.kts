@@ -54,6 +54,8 @@ dependencies {
     implementation(libs.androidx.navigation.compose)
     implementation(libs.socket.io.client)
     implementation(libs.play.services.location)
+    
+    implementation("org.osmdroid:osmdroid-android:6.1.18")
     implementation(libs.androidx.datastore.preferences)
 
     testImplementation(libs.junit)
