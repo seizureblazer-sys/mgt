@@ -50,12 +50,12 @@ dependencies {
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
-    implementation("androidx.compose.material3:material3-adaptive-navigation-suite:1.3.1")
+    implementation(libs.androidx.compose.material3.adaptive.navigation.suite)
+    implementation(libs.androidx.compose.material.icons.extended)
     implementation(libs.androidx.navigation.compose)
     implementation(libs.socket.io.client)
     implementation(libs.play.services.location)
-    
-    implementation("org.osmdroid:osmdroid-android:6.1.18")
+    implementation(libs.osmdroid)
     implementation(libs.androidx.datastore.preferences)
 
     testImplementation(libs.junit)
