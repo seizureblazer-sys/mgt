@@ -66,9 +66,10 @@ class MainActivity : ComponentActivity() {
                     if (userSession == null) {
                         LoginScreen(onLoginSuccess = { id, username, role ->
                             lifecycleScope.launch {
-                                val user = User(id, username, role)
+                                val assignedRole = if (username == "admin") UserRole.SUPER_ADMIN else role
+                                val user = User(id, username, assignedRole)
                                 sessionManager.saveSession(user)
-                                if (role == UserRole.PATROL) startTrackingService()
+                                if (assignedRole == UserRole.PATROL) startTrackingService()
                             }
                         })
                     } else {
