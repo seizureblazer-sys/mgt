@@ -47,6 +47,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        org.osmdroid.config.Configuration.getInstance().load(this, android.preference.PreferenceManager.getDefaultSharedPreferences(this))
+        org.osmdroid.config.Configuration.getInstance().userAgentValue = "com.example.mgpt"
         sessionManager = SessionManager(this)
         
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
