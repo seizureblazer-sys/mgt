@@ -50,7 +50,7 @@ dependencies {
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
-    implementation(libs.androidx.compose.material3.adaptive.navigation.suite)
+    implementation("androidx.compose.material3:material3-adaptive-navigation-suite:1.0.0-alpha07")
     implementation(libs.androidx.navigation.compose)
     implementation(libs.socket.io.client)
     implementation(libs.play.services.location)
